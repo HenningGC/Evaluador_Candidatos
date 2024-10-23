@@ -1,6 +1,7 @@
 from openai import OpenAI
 import gradio as gr
 from dotenv import load_dotenv
+from pydantic import BaseModel
 import os
 
 load_dotenv()
@@ -9,17 +10,63 @@ client = OpenAI(
     api_key= os.getenv("OPENAI_API_KEY")
 )
 
+class Job(BaseModel):
+    puesto: str
+    empresa: str
+    duracion: str
+
+class JobEvent(BaseModel):
+    PuntuajeTotal: int
+    ListadoExperiencia: list[Job]
+    DescripcionExperiencia: str
+
 SYSTEM_PROMPT = (
-    "Eres un evaluador de candidatos. Vas a recibir el nombre de una oferta de trabajo y el CV del candidato."
-    "Vas a puntuar la experiencia de esa persona con un valor numérico entre 0 a 100 según la experiencia.\n"
-    "Devolverás solamente un JSON que contenga las llaves: Puntuaje Total, Listado de Experiencia, Descripción de experiencia"
-    "El cálculo del puntuaje quiero que sea el mismo que se suele usar en los sistemas de ATS."
-    "Además solo puedes tener en cuenta los puestos de trabajo muy relacionados con el del título aportado a la hora de dar un puntuaje por encima de 0.\n"
-    "En el listado de experiencia solo puedes mencionar esos trabajos puntuados por encima de 0\n"
-    "La descripción de experiencia debe devolver un texto explicativo sobre la experiencia del candidato y porqué ha obtenido la puntuación dada."
-    "Finalmente quiero que me devuelvas toda esta información en formato JSON.\n"
-    "Ejemplo:\n"
-    "{Puntuaje total: 80,\nListado de experiencia: [{Puesto: 'Cajero', Empresa: 'Bar Inc', Duración: '5 años'},{Puesto: 'Cajero', Empresa: 'Testers Supermarkets', Duración: '1 año'}], Descripción de experiencia: '...'}"
+
+    """
+    You are a CV & Resume - Evaluator (ATS)
+    Evaluate a candidate's CV against a specified job offer title.
+    Review the candidate's CV and identify any relevant experience directly related to the specified job offer title. Score the candidate's experience from 0 to 100 based on the relevance and quality of the related job experiences.
+
+    # Steps
+
+    1. **Identify Relevant Experience**: Analyze the candidate’s CV and extract job experiences where the role matches or aligns closely with the specified job offer title.
+    
+    2. **Scoring Experience**: Based on relevance and duration, assign a numerical score between 0 and 100. Only consider jobs directly related to the provided job title.
+
+    3. **List of Relevant Experiences**: For each relevant experience, gather:
+    - Position
+    - Company
+    - Duration
+
+    4. **Description Generation**: Write a concise explanation detailing the candidate's relevant experience and justify the score given.
+
+    # Examples
+
+    **Example Input**
+    - CV: Candidate has experience as a Cashier at XYZ Market for 2 years and as a Customer Service Representative for 1 year.
+    - Job Offer Title: Cashier at Dia Supermarket
+
+    **Example Output**
+
+    "score": 80,
+    "relevant_experience_list": [
+        {
+        "position": "Cashier",
+        "company": "XYZ Market",
+        "duration": "2 years"
+        }
+    ],
+    "experience_description": "The candidate received a score of 80 due to their 2 years of experience as a cashier which directly aligns with the job offer. The role at XYZ Market demonstrates necessary skills for the Cashier role at Dia Supermarket."
+    }
+    ```
+
+    # Notes
+
+    - Ensure experiences not relevant to the job title, such as delivery roles for a cashier position, are excluded from consideration and the JSON output.
+    - Any job experiences must be clearly related to the job title in order to be included and affect the score.
+    - Pay attention to detail, ensuring that only relevant experiences are used for scoring and reflection.
+    - The answer should be in Spanish
+    """
 )
 
 def evaluate_cv(cv_text, job_title):
@@ -30,14 +77,15 @@ def evaluate_cv(cv_text, job_title):
     ]
 
     try:
-        response = client.chat.completions.create(
-            model="gpt-4o-mini",
+        completion = client.beta.chat.completions.parse(
+            model="gpt-4o-mini-2024-07-18",
             messages=messages,
-            temperature=0
+            response_format=JobEvent,
         )
-        print(response)
 
-        return response.choices[0].message.content
+        print(completion)
+        
+        return completion.choices[0].message.content
     except Exception as e:
         return f"Error: {str(e)}"
 
