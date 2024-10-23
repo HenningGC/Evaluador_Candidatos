@@ -38,7 +38,7 @@ def evaluate_cv(cv_text, job_title):
     ]
 
     try:
-        completion = client.beta.chat.completions.parse(
+        completion = defaultClient.beta.chat.completions.parse(
             model="gpt-4o-mini",
             messages=messages,
             response_format=CompleteJobEvent,
